@@ -72,7 +72,7 @@ class AIAnalyzer:
         # Sprawdź limit zapytań
         if not self._check_daily_limit():
             raise Exception(
-                "❌ Przekroczono dzienny limit 50 zapytań AI. Spróbuj ponownie jutro."
+                "❌ Przekroczono dzienny limit 20 zapytań AI. Spróbuj ponownie jutro."
             )
 
         # 1. Przygotuj dane do analizy
@@ -403,6 +403,13 @@ Odpowiedz TYLKO kodem JSON, bez dodatkowych komentarzy.
                     "krs-online.com.pl",
                     "krs.ms.gov.pl",
                     "ceidg.gov.pl",
+                    "monitorfirm.pb.pl",
+                    "polskiedane.io",
+                    "firmeo.pl",
+                    "golden-line.pl",
+                    "pkt.pl",
+                    "yasni.pl",
+                    "europages.pl",
                 ]
 
                 for result in results:
@@ -499,7 +506,10 @@ Odpowiedz TYLKO kodem JSON, bez dodatkowych komentarzy.
                 word in services_text
                 for word in [
                     "it", "software", "technolog", "digital", "wywiad",
-                    "data", "informacja", "programowanie", "aplikacje"
+                    "data", "informacja", "programowanie", "aplikacje",
+                    "web", "strony internetowe", "ecommerce", "sklep",
+                    "cms", "wordpress", "react", "angular", "node",
+                    "hosting", "serwer", "cloud", "baz danych", "api"
                 ]
             ):
                 return "IT i technologie"
@@ -541,7 +551,8 @@ Odpowiedz TYLKO kodem JSON, bez dodatkowych komentarzy.
         # IT
         if any(
             word in name_lower 
-            for word in ["tech", "soft", "digital", "it", "data", "info"]
+            for word in ["tech", "soft", "digital", "it", "data", "info", 
+                        "web", "code", "dev", "system", "net", "computer"]
         ):
             return "IT i technologie"
         
@@ -709,7 +720,7 @@ Odpowiedz TYLKO kodem JSON."""
             if today not in usage_data:
                 return True
 
-            return usage_data[today] < 50
+            return usage_data[today] < 20
 
         except Exception as e:
             print(f"Błąd sprawdzania limitu: {str(e)}")
@@ -717,7 +728,7 @@ Odpowiedz TYLKO kodem JSON."""
 
     def _log_usage(self):
         """
-        Zapisuje użycie API (limit 50/dzień)
+        Zapisuje użycie API (limit 20/dzień)
         """
         try:
             usage_data = {}
@@ -748,7 +759,7 @@ Odpowiedz TYLKO kodem JSON."""
         """
         try:
             if not os.path.exists(self.usage_file):
-                return 50
+                return 20
 
             with open(self.usage_file, "r") as f:
                 usage_data = json.load(f)
@@ -756,7 +767,7 @@ Odpowiedz TYLKO kodem JSON."""
             today = datetime.now().strftime("%Y-%m-%d")
             used = usage_data.get(today, 0)
 
-            return max(0, 50 - used)
+            return max(0, 20 - used)
 
         except:
-            return 50
+            return 20
