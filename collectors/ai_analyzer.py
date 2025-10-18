@@ -72,7 +72,7 @@ class AIAnalyzer:
         # Sprawdź limit zapytań
         if not self._check_daily_limit():
             raise Exception(
-                "❌ Przekroczono dzienny limit 20 zapytań AI. Spróbuj ponownie jutro."
+                "❌ Przekroczono dzienny limit 50 zapytań AI. Spróbuj ponownie jutro."
             )
 
         # 1. Przygotuj dane do analizy
@@ -87,7 +87,7 @@ class AIAnalyzer:
         result = self._parse_gpt_response(gpt_response, company_name)
 
         # 4. Wyszukaj konkurencję
-        competitors = self._search_competitors(company_name, nip)
+        competitors = self._search_competitors(company_name, nip, collected_data)
         result.competitors = competitors
 
         # 5. Analiza finansowa (symulacja - w przyszłości można dodać API)
@@ -322,7 +322,7 @@ Odpowiedz TYLKO kodem JSON, bez dodatkowych komentarzy.
         except Exception as e:
             raise Exception(f"Błąd przetwarzania odpowiedzi AI: {str(e)}")
 
-    def _search_competitors(self, company_name: str, nip: str) -> List[CompetitorInfo]:
+    def _search_competitors(self, company_name: str, nip: str, collected_data: Dict[str, Any]) -> List[CompetitorInfo]:
         """
         Wyszukuje konkurencję firmy przez DuckDuckGo z lepszym filtrowaniem
         """
@@ -352,15 +352,31 @@ Odpowiedz TYLKO kodem JSON, bez dodatkowych komentarzy.
             ).strip()
 
             # Wyciągnij główne słowa kluczowe (nie stop words)
-            stop_words = {"sp", "z", "o", "o", "s", "a", "i", "w", "na", "do", "dla"}
+            stop_words = {"sp", "z", "o", "o", "s", "a", "i", "w", "na", "do", "dla", "bis"}
             company_key_words = [
                 w
                 for w in normalized_company_name.split()
                 if w not in stop_words and len(w) > 3
             ]
 
-            # Zapytanie: "konkurenci [nazwa firmy bez sp zoo]"
-            query = f"konkurenci {clean_name} Polska"
+            # INTELIGENTNE ZAPYTANIE - sprawdź branżę
+            website_data = collected_data.get("website")
+            services_text = ""
+            if website_data and website_data.services:
+                services_text = " ".join(website_data.services).lower()
+            
+            # Określ query na podstawie branży
+            if any(word in clean_name for word in ["oze", "wiatr", "solar", "fotowolta", "energia"]) or \
+               any(word in services_text for word in ["fotowoltaika", "panele słoneczne", "pompa ciepła", "oze"]):
+                query = "firmy fotowoltaika instalacje OZE Polska"
+            elif any(word in clean_name for word in ["wywiad", "informacja", "data"]) or \
+                 any(word in services_text for word in ["wywiad", "informacja biznesowa", "due diligence"]):
+                query = "firmy wywiad gospodarczy informacja biznesowa Polska"
+            elif any(word in clean_name for word in ["tech", "it", "soft"]) or \
+                 any(word in services_text for word in ["software", "it", "technolog"]):
+                query = "firmy IT software development Polska"
+            else:
+                query = f"konkurenci {clean_name} Polska"
 
             session = requests.Session()
             session.headers.update(
@@ -387,7 +403,6 @@ Odpowiedz TYLKO kodem JSON, bez dodatkowych komentarzy.
                     "krs-online.com.pl",
                     "krs.ms.gov.pl",
                     "ceidg.gov.pl",
-                    "pwginfo.pl",  # Dodane - strona analizowanej firmy
                 ]
 
                 for result in results:
@@ -413,11 +428,9 @@ Odpowiedz TYLKO kodem JSON, bez dodatkowych komentarzy.
                         matching_words = [
                             w for w in company_key_words if w in title_words
                         ]
-                        similarity = len(matching_words) / len(company_key_words)
+                        similarity = len(matching_words) / len(company_key_words) if company_key_words else 0
 
-                        if (
-                            similarity > 0.6
-                        ):  # Jeśli > 60% słów pasuje, to pewnie ta sama firma
+                        if similarity > 0.6:  # Jeśli > 60% słów pasuje, to pewnie ta sama firma
                             continue
 
                     # SUPER FILTR 3: Sprawdź czy URL zawiera nazwę firmy
@@ -461,49 +474,82 @@ Odpowiedz TYLKO kodem JSON, bez dodatkowych komentarzy.
 
     def _extract_industry(self, company_name: str, data: Dict[str, Any]) -> str:
         """
-        Wyciąga branżę firmy z nazwy i danych
+        Wyciąga branżę firmy z nazwy i danych - ULEPSZONA WERSJA
         """
         website_data = data.get("website")
 
+        # Sprawdź usługi ze strony WWW
         if website_data and website_data.services:
             services_text = " ".join(website_data.services).lower()
 
+            # OZE i energia odnawialna
             if any(
                 word in services_text
                 for word in [
-                    "it",
-                    "software",
-                    "technolog",
-                    "digital",
-                    "wywiad",
-                    "data",
-                    "informacja",
+                    "fotowoltaika", "fotowoltaik", "oze", "fotowolta", 
+                    "panele słoneczne", "panel słoneczny", "pompa ciepła", 
+                    "pompy ciepła", "energia odnawialna", "solarne", "solar",
+                    "instalacje elektryczne", "montaż paneli"
+                ]
+            ):
+                return "OZE i energia odnawialna"
+            
+            # IT i technologie
+            if any(
+                word in services_text
+                for word in [
+                    "it", "software", "technolog", "digital", "wywiad",
+                    "data", "informacja", "programowanie", "aplikacje"
                 ]
             ):
                 return "IT i technologie"
+            
+            # Budownictwo
             elif any(
                 word in services_text for word in ["budow", "remont", "konstrukc"]
             ):
                 return "Budownictwo"
+            
+            # Handel
             elif any(
                 word in services_text for word in ["handel", "sprzedaż", "dystrybucja"]
             ):
                 return "Handel"
+            
+            # Consulting
             elif any(
                 word in services_text
-                for word in ["konsult", "doradztwo", "audyt", "wywiad"]
+                for word in ["konsult", "doradztwo", "audyt", "wywiad gospodarczy"]
             ):
                 return "Consulting i doradztwo"
+            
+            # Produkcja
             elif any(word in services_text for word in ["produkcja", "wytwarzanie"]):
                 return "Produkcja"
 
+        # Sprawdź nazwę firmy
         name_lower = company_name.lower()
+        
+        # OZE
         if any(
-            word in name_lower for word in ["tech", "soft", "digital", "it", "data"]
+            word in name_lower 
+            for word in ["eko-wiatr", "eko wiatr", "oze", "fotowolta", "solar", 
+                        "energia", "wiatr", "sun", "eco"]
+        ):
+            return "OZE i energia odnawialna"
+        
+        # IT
+        if any(
+            word in name_lower 
+            for word in ["tech", "soft", "digital", "it", "data", "info"]
         ):
             return "IT i technologie"
-        elif any(word in name_lower for word in ["bud", "construction"]):
+        
+        # Budownictwo
+        elif any(word in name_lower for word in ["bud", "construction", "dom"]):
             return "Budownictwo"
+        
+        # Wywiad
         elif any(word in name_lower for word in ["wywiad", "intelligence"]):
             return "Wywiad gospodarczy i informacja biznesowa"
 
@@ -663,7 +709,7 @@ Odpowiedz TYLKO kodem JSON."""
             if today not in usage_data:
                 return True
 
-            return usage_data[today] < 100
+            return usage_data[today] < 50
 
         except Exception as e:
             print(f"Błąd sprawdzania limitu: {str(e)}")
@@ -671,7 +717,7 @@ Odpowiedz TYLKO kodem JSON."""
 
     def _log_usage(self):
         """
-        Zapisuje użycie API (limit 20/dzień)
+        Zapisuje użycie API (limit 50/dzień)
         """
         try:
             usage_data = {}
@@ -702,7 +748,7 @@ Odpowiedz TYLKO kodem JSON."""
         """
         try:
             if not os.path.exists(self.usage_file):
-                return 20
+                return 50
 
             with open(self.usage_file, "r") as f:
                 usage_data = json.load(f)
@@ -710,7 +756,7 @@ Odpowiedz TYLKO kodem JSON."""
             today = datetime.now().strftime("%Y-%m-%d")
             used = usage_data.get(today, 0)
 
-            return max(0, 20 - used)
+            return max(0, 50 - used)
 
         except:
-            return 20
+            return 50
