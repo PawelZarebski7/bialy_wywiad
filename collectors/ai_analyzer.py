@@ -663,7 +663,7 @@ Odpowiedz TYLKO kodem JSON."""
             if today not in usage_data:
                 return True
 
-            return usage_data[today] < 20
+            return usage_data[today] < 100
 
         except Exception as e:
             print(f"Błąd sprawdzania limitu: {str(e)}")
